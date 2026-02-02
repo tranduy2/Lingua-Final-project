@@ -22,7 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${lexend.variable} font-sans antialiased`}>
+      <body className={`${lexend.className} antialiased`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

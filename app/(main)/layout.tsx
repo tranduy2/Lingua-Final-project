@@ -7,22 +7,15 @@ export default function MainLayout({
 }: {
     children: React.ReactNode;
 }) {
-    // TODO: Fetch real user data from Supabase
-    const mockUser = {
-        displayName: "Student",
-        currentStreak: 5,
-        totalXp: 250,
-    };
-
     return (
-        <div className="min-h-screen bg-background">
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
             {/* Desktop Sidebar */}
             <Sidebar />
 
             {/* Main Content Area */}
             <div className="md:pl-64">
                 {/* Header */}
-                <Header user={mockUser} />
+                <Header />
 
                 {/* Page Content */}
                 <main id="main-content" className="min-h-[calc(100vh-4rem)] pb-20 md:pb-0">

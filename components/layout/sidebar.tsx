@@ -2,78 +2,63 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, LayoutDashboard, Trophy, User, Settings, Shield, GraduationCap } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const navItems = [
-    { href: "/learn", label: "Learn", icon: BookOpen },
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
-    { href: "/profile", label: "Profile", icon: User },
+    { href: "/learn", label: "Learn", icon: "📚" },
+    { href: "/dashboard", label: "Dashboard", icon: "📊" },
+    { href: "/leaderboard", label: "Leaderboard", icon: "🏆" },
+    { href: "/profile", label: "Profile", icon: "👤" },
 ];
 
 export function Sidebar() {
     const pathname = usePathname();
 
     return (
-        <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 z-50">
-            <div className="flex flex-col flex-grow bg-card border-r border-border">
-                {/* Logo */}
-                <div className="flex items-center gap-2 h-16 px-6 border-b border-border">
-                    <GraduationCap className="h-8 w-8 text-primary" />
-                    <span className="text-xl font-bold text-foreground">Lingua</span>
+        <aside className="hidden md:flex flex-col w-64 h-screen bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-4 fixed left-0 top-0">
+            {/* Logo */}
+            <Link href="/learn" className="flex items-center gap-3 mb-8 px-2">
+                <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center">
+                    <span className="text-white font-bold text-lg">L</span>
                 </div>
+                <span className="text-xl font-bold text-gray-900 dark:text-white">Lingua</span>
+            </Link>
 
-                {/* Navigation */}
-                <nav className="flex-1 px-3 py-4 space-y-1">
-                    {navItems.map((item) => {
-                        const Icon = item.icon;
-                        const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-
-                        return (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive
-                                        ? "bg-primary text-primary-foreground"
-                                        : "text-foreground hover:bg-muted"
-                                    }`}
-                            >
-                                <Icon className="h-5 w-5" />
-                                {item.label}
-                            </Link>
-                        );
-                    })}
-
-                    {/* Admin link */}
-                    <div className="pt-4 mt-4 border-t border-border">
-                        <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase">
-                            Admin
-                        </p>
+            {/* Nav Items */}
+            <nav className="flex-1 space-y-2">
+                {navItems.map((item) => {
+                    const isActive = pathname.startsWith(item.href);
+                    return (
                         <Link
-                            href="/admin"
-                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${pathname.startsWith("/admin")
-                                    ? "bg-primary text-primary-foreground"
-                                    : "text-foreground hover:bg-muted"
+                            key={item.href}
+                            href={item.href}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${isActive
+                                    ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
+                                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                                 }`}
                         >
-                            <Shield className="h-5 w-5" />
-                            Admin Panel
+                            <span className="text-xl">{item.icon}</span>
+                            <span>{item.label}</span>
                         </Link>
-                    </div>
-                </nav>
+                    );
+                })}
+            </nav>
 
-                {/* Bottom section */}
-                <div className="p-4 border-t border-border space-y-3">
-                    <Link
-                        href="/settings"
-                        className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted"
-                    >
-                        <Settings className="h-5 w-5" />
-                        Settings
-                    </Link>
-                    <ThemeToggle />
-                </div>
+            {/* Admin Link */}
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mb-4">
+                <Link
+                    href="/admin"
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                    <span className="text-xl">⚙️</span>
+                    <span>Admin</span>
+                </Link>
+            </div>
+
+            {/* Theme Toggle */}
+            <div className="flex items-center gap-3 px-2">
+                <ThemeToggle />
+                <span className="text-sm text-gray-600 dark:text-gray-400">Theme</span>
             </div>
         </aside>
     );
