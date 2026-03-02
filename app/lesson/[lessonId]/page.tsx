@@ -1,84 +1,220 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, CheckCircle, XCircle, ArrowRight } from "lucide-react";
+import { createClient } from "@/lib/client";
+import {
+    Exercise,
+    MultipleChoice,
+    FillInTheBlank,
+    WordOrdering,
+    ListeningExercise,
+} from "@/components/exercises/exercise-types";
 
-// Mock exercises - will replace with Supabase later
-const mockExercises: Record<string, Array<{
+interface LessonInfo {
     id: string;
-    type: string;
-    question: string;
-    correctAnswer: string;
-    explanation: string;
-}>> = {
-    "lesson-1": [
-        { id: "ex-1", type: "fill_blank", question: "Complete: Hello! My name ___ John.", correctAnswer: "is", explanation: "Use 'is' with singular subjects (my name is)." },
-        { id: "ex-2", type: "translation", question: "Translate to English: Xin chào", correctAnswer: "hello", explanation: "'Hello' is a common greeting in English." },
-        { id: "ex-3", type: "fill_blank", question: "Nice ___ meet you!", correctAnswer: "to", explanation: "The phrase is 'Nice to meet you' - a polite greeting." },
-    ],
-    "lesson-2": [
-        { id: "ex-4", type: "fill_blank", question: "What ___ your name?", correctAnswer: "is", explanation: "'Is' is used with 'what' for questions about singular nouns." },
-        { id: "ex-5", type: "fill_blank", question: "My name ___ Sarah.", correctAnswer: "is", explanation: "Use 'is' to connect a subject with its name." },
-    ],
-};
-
-// Default exercises for any lesson
-const defaultExercises = [
-    { id: "ex-d1", type: "fill_blank", question: "I ___ a student.", correctAnswer: "am", explanation: "Use 'am' with 'I' (first person singular)." },
-    { id: "ex-d2", type: "fill_blank", question: "She ___ from Vietnam.", correctAnswer: "is", explanation: "Use 'is' with he/she/it (third person singular)." },
-    { id: "ex-d3", type: "fill_blank", question: "They ___ my friends.", correctAnswer: "are", explanation: "Use 'are' with they/we/you (plural subjects)." },
-];
+    title: string;
+    xp_reward: number;
+}
 
 export default function LessonPage() {
     const params = useParams();
     const router = useRouter();
     const lessonId = params.lessonId as string;
 
-    const exercises = mockExercises[lessonId] || defaultExercises;
-
+    const [lesson, setLesson] = useState<LessonInfo | null>(null);
+    const [exercises, setExercises] = useState<Exercise[]>([]);
+    const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [answer, setAnswer] = useState("");
     const [showResult, setShowResult] = useState(false);
     const [isCorrect, setIsCorrect] = useState(false);
     const [score, setScore] = useState(0);
+    const [correctCount, setCorrectCount] = useState(0);
+    const [lessonComplete, setLessonComplete] = useState(false);
+    const [explanation, setExplanation] = useState("");
+
+    useEffect(() => {
+        async function fetchData() {
+            const supabase = createClient();
+
+            // Fetch lesson info
+            const { data: lessonData } = await supabase
+                .from("lessons")
+                .select("id, title, xp_reward")
+                .eq("id", lessonId)
+                .single();
+
+            if (lessonData) {
+                setLesson(lessonData);
+            }
+
+            // Fetch exercises for this lesson
+            const { data: exercisesData } = await supabase
+                .from("exercises")
+                .select("id, type, question, correct_answer, grammar_rule_id, options")
+                .eq("lesson_id", lessonId)
+                .order("order_index");
+
+            if (exercisesData && exercisesData.length > 0) {
+                setExercises(exercisesData);
+            }
+
+            setLoading(false);
+        }
+
+        fetchData();
+    }, [lessonId]);
 
     const currentExercise = exercises[currentIndex];
-    const progress = ((currentIndex + 1) / exercises.length) * 100;
+    const progress = exercises.length > 0 ? ((currentIndex + 1) / exercises.length) * 100 : 0;
 
-    function handleSubmit() {
-        const correct = answer.toLowerCase().trim() === currentExercise.correctAnswer.toLowerCase().trim();
+    async function handleAnswer(answer: string) {
+        if (!currentExercise) return;
+
+        // Validate answer
+        const correctAnswer = currentExercise.correct_answer.split("|")[0].trim();
+        const correct = answer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
+
         setIsCorrect(correct);
         setShowResult(true);
+
         if (correct) {
             setScore(score + 10);
+            setCorrectCount(correctCount + 1);
+        }
+
+        // Fetch grammar rule explanation if wrong and has a rule
+        if (!correct && currentExercise.grammar_rule_id) {
+            const supabase = createClient();
+            const { data: rule } = await supabase
+                .from("grammar_rules")
+                .select("explanation")
+                .eq("id", currentExercise.grammar_rule_id)
+                .single();
+
+            if (rule) {
+                setExplanation(rule.explanation);
+            }
+        } else {
+            setExplanation("");
         }
     }
 
     function handleNext() {
         if (currentIndex < exercises.length - 1) {
             setCurrentIndex(currentIndex + 1);
-            setAnswer("");
             setShowResult(false);
+            setExplanation("");
         } else {
-            // Lesson complete - go back to learn
-            router.push("/learn");
+            setLessonComplete(true);
         }
     }
 
+    // Loading state
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="text-center">
+                    <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-muted-foreground">Loading lesson...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // No exercises found
+    if (exercises.length === 0) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="text-center max-w-md px-4">
+                    <div className="text-6xl mb-4">📝</div>
+                    <h1 className="text-2xl font-bold text-foreground mb-2">No exercises yet</h1>
+                    <p className="text-muted-foreground mb-6">
+                        This lesson doesn&apos;t have any exercises. Check back later!
+                    </p>
+                    <Link
+                        href="/learn"
+                        className="inline-block px-6 py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:opacity-90"
+                    >
+                        Back to Learning Path
+                    </Link>
+                </div>
+            </div>
+        );
+    }
+
+    // Lesson complete screen
+    if (lessonComplete) {
+        const percentage = Math.round((correctCount / exercises.length) * 100);
+        const isPassed = percentage >= 60;
+
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="text-center max-w-md px-4">
+                    <div className="text-6xl mb-4">{isPassed ? "🎉" : "📚"}</div>
+                    <h1 className="text-2xl font-bold text-foreground mb-2">
+                        {isPassed ? "Lesson Complete!" : "Keep Practicing!"}
+                    </h1>
+                    <p className="text-muted-foreground mb-6">
+                        You got {correctCount} out of {exercises.length} correct ({percentage}%)
+                    </p>
+
+                    {/* Score summary */}
+                    <div className="bg-card border border-border rounded-xl p-6 mb-6 text-left space-y-3">
+                        <div className="flex justify-between">
+                            <span className="text-muted-foreground">XP Earned</span>
+                            <span className="font-bold text-primary">+{score} XP</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-muted-foreground">Accuracy</span>
+                            <span className="font-bold text-foreground">{percentage}%</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-muted-foreground">Exercises</span>
+                            <span className="font-bold text-foreground">{correctCount}/{exercises.length}</span>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => {
+                                setCurrentIndex(0);
+                                setScore(0);
+                                setCorrectCount(0);
+                                setShowResult(false);
+                                setLessonComplete(false);
+                                setExplanation("");
+                            }}
+                            className="flex-1 py-3 border border-border rounded-xl font-medium text-foreground hover:bg-muted"
+                        >
+                            Try Again
+                        </button>
+                        <Link
+                            href="/learn"
+                            className="flex-1 py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:opacity-90 text-center"
+                        >
+                            Continue
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Exercise screen
     return (
         <div className="min-h-screen bg-background">
-            {/* Header */}
+            {/* Header with progress bar */}
             <header className="sticky top-0 bg-card border-b border-border z-10">
                 <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-4">
-                    <Link href="/learn" className="p-2 hover:bg-muted rounded-lg">
-                        <ChevronLeft className="h-5 w-5" />
+                    <Link href="/learn" className="p-2 hover:bg-muted rounded-lg text-muted-foreground">
+                        ✕
                     </Link>
                     <div className="flex-1">
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div className="h-3 bg-muted rounded-full overflow-hidden">
                             <div
-                                className="h-full bg-primary transition-all"
+                                className="h-full bg-primary rounded-full transition-all duration-500"
                                 style={{ width: `${progress}%` }}
                             />
                         </div>
@@ -86,73 +222,78 @@ export default function LessonPage() {
                     <span className="text-sm text-muted-foreground">
                         {currentIndex + 1}/{exercises.length}
                     </span>
-                    <span className="text-sm font-bold text-accent">+{score} XP</span>
+                    <span className="text-sm font-bold text-primary">+{score} XP</span>
                 </div>
             </header>
 
             {/* Content */}
             <main className="max-w-2xl mx-auto px-4 py-8">
                 <div className="space-y-6">
-                    {/* Question */}
-                    <div className="bg-card border border-border rounded-xl p-6">
-                        <p className="text-sm text-muted-foreground mb-2 capitalize">
-                            {currentExercise.type.replace("_", " ")}
-                        </p>
-                        <h2 className="text-xl font-semibold">{currentExercise.question}</h2>
-                    </div>
+                    {/* Exercise type label */}
+                    <span className="inline-block px-3 py-1 text-xs font-medium bg-muted text-muted-foreground rounded-full capitalize">
+                        {currentExercise.type.replace("_", " ")}
+                    </span>
 
-                    {/* Answer input */}
+                    {/* Render the right exercise component */}
                     {!showResult && (
-                        <div className="space-y-4">
-                            <input
-                                type="text"
-                                value={answer}
-                                onChange={(e) => setAnswer(e.target.value)}
-                                placeholder="Type your answer..."
-                                className="w-full h-12 px-4 rounded-lg border border-input bg-background text-lg"
-                                autoFocus
-                                onKeyDown={(e) => e.key === "Enter" && answer && handleSubmit()}
-                            />
-                            <button
-                                onClick={handleSubmit}
-                                disabled={!answer}
-                                className="w-full h-12 bg-primary text-primary-foreground font-medium rounded-lg hover:opacity-90 disabled:opacity-50"
-                            >
-                                Check Answer
-                            </button>
-                        </div>
+                        <>
+                            {currentExercise.type === "multiple_choice" && (
+                                <MultipleChoice exercise={currentExercise} onAnswer={handleAnswer} disabled={showResult} />
+                            )}
+                            {currentExercise.type === "fill_blank" && (
+                                <FillInTheBlank exercise={currentExercise} onAnswer={handleAnswer} disabled={showResult} />
+                            )}
+                            {currentExercise.type === "word_order" && (
+                                <WordOrdering exercise={currentExercise} onAnswer={handleAnswer} disabled={showResult} />
+                            )}
+                            {currentExercise.type === "listening" && (
+                                <ListeningExercise exercise={currentExercise} onAnswer={handleAnswer} disabled={showResult} />
+                            )}
+                            {currentExercise.type === "translation" && (
+                                <FillInTheBlank exercise={currentExercise} onAnswer={handleAnswer} disabled={showResult} />
+                            )}
+                        </>
                     )}
 
-                    {/* Result */}
+                    {/* Result feedback */}
                     {showResult && (
-                        <div className={`p-6 rounded-xl ${isCorrect ? "bg-success/10" : "bg-destructive/10"}`}>
-                            <div className="flex items-center gap-3 mb-2">
-                                {isCorrect ? (
-                                    <CheckCircle className="h-6 w-6 text-success" />
-                                ) : (
-                                    <XCircle className="h-6 w-6 text-destructive" />
-                                )}
-                                <span className={`font-semibold ${isCorrect ? "text-success" : "text-destructive"}`}>
+                        <div
+                            className={`p-6 rounded-xl border-2 ${isCorrect
+                                    ? "bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800"
+                                    : "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800"
+                                }`}
+                        >
+                            <div className="flex items-center gap-3 mb-3">
+                                <span className="text-3xl">{isCorrect ? "✅" : "❌"}</span>
+                                <span
+                                    className={`text-xl font-bold ${isCorrect
+                                            ? "text-green-600 dark:text-green-400"
+                                            : "text-red-600 dark:text-red-400"
+                                        }`}
+                                >
                                     {isCorrect ? "Correct! +10 XP" : "Incorrect"}
                                 </span>
                             </div>
 
                             {!isCorrect && (
-                                <p className="text-sm mb-2">
-                                    Correct answer: <strong>{currentExercise.correctAnswer}</strong>
+                                <p className="text-sm text-foreground mb-2">
+                                    Correct answer: <strong>{currentExercise.correct_answer.split("|")[0]}</strong>
                                 </p>
                             )}
 
-                            <p className="text-sm text-muted-foreground mb-4">
-                                {currentExercise.explanation}
-                            </p>
+                            {/* Grammar rule explanation */}
+                            {explanation && (
+                                <div className="mt-3 p-4 bg-card border border-border rounded-lg">
+                                    <p className="text-xs font-medium text-primary mb-1">📖 Grammar Tip</p>
+                                    <p className="text-sm text-foreground">{explanation}</p>
+                                </div>
+                            )}
 
                             <button
                                 onClick={handleNext}
-                                className="w-full h-12 bg-primary text-primary-foreground font-medium rounded-lg hover:opacity-90 flex items-center justify-center gap-2"
+                                className="w-full mt-4 h-12 bg-primary text-primary-foreground font-medium rounded-xl hover:opacity-90 flex items-center justify-center gap-2"
                             >
-                                {currentIndex < exercises.length - 1 ? "Next Question" : "Finish Lesson"}
-                                <ArrowRight className="h-4 w-4" />
+                                {currentIndex < exercises.length - 1 ? "Next Question →" : "Finish Lesson 🎉"}
                             </button>
                         </div>
                     )}
