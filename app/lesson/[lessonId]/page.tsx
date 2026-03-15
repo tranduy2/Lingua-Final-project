@@ -11,6 +11,7 @@ import {
     WordOrdering,
     ListeningExercise,
 } from "@/components/exercises/exercise-types";
+import { AnswerDiff } from "@/components/feedback/answer-diff";
 
 interface LessonInfo {
     id: string;
@@ -33,6 +34,7 @@ export default function LessonPage() {
     const [correctCount, setCorrectCount] = useState(0);
     const [lessonComplete, setLessonComplete] = useState(false);
     const [explanation, setExplanation] = useState("");
+    const [userAnswer, setUserAnswer] = useState("");
 
     useEffect(() => {
         async function fetchData() {
@@ -78,6 +80,7 @@ export default function LessonPage() {
 
         setIsCorrect(correct);
         setShowResult(true);
+        setUserAnswer(answer);
 
         if (correct) {
             setScore(score + 10);
@@ -276,9 +279,12 @@ export default function LessonPage() {
                             </div>
 
                             {!isCorrect && (
-                                <p className="text-sm text-foreground mb-2">
-                                    Correct answer: <strong>{currentExercise.correct_answer.split("|")[0]}</strong>
-                                </p>
+                                <div className="mb-3">
+                                    <AnswerDiff
+                                        userAnswer={userAnswer}
+                                        correctAnswer={currentExercise.correct_answer.split("|")[0]}
+                                    />
+                                </div>
                             )}
 
                             {/* Grammar rule explanation */}
