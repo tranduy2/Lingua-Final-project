@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/client";
 
-// Simple interfaces
 interface Lesson {
     id: string;
     title: string;
@@ -21,29 +20,30 @@ interface Unit {
     lessons: Lesson[];
 }
 
+// Unit banner color cycles
+const unitColors = [
+    "from-green-400 to-green-500",
+    "from-yellow-400 to-yellow-500",
+    "from-blue-400 to-blue-500",
+    "from-purple-400 to-purple-500",
+    "from-pink-400 to-pink-500",
+];
+
 export default function LearnPage() {
     const [units, setUnits] = useState<Unit[]>([]);
     const [loading, setLoading] = useState(true);
+    const [userXp, setUserXp] = useState(0);
 
     useEffect(() => {
-        async function fetchUnits() {
+        async function fetchData() {
             const supabase = createClient();
 
-            const { data, error } = await supabase
+            const { data } = await supabase
                 .from("units")
                 .select(`
-          id,
-          title,
-          description,
-          cefr_level,
-          order_index,
-          lessons (
-            id,
-            title,
-            order_index,
-            xp_reward
-          )
-        `)
+                    id, title, description, cefr_level, order_index,
+                    lessons ( id, title, order_index, xp_reward )
+                `)
                 .eq("is_published", true)
                 .order("order_index");
 
@@ -54,35 +54,38 @@ export default function LearnPage() {
                 }));
                 setUnits(sorted);
             }
+
+            // Fetch user XP
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data: profile } = await supabase
+                    .from("user_statistics")
+                    .select("total_xp")
+                    .eq("user_id", user.id)
+                    .single();
+                if (profile) setUserXp(profile.total_xp || 0);
+            }
+
             setLoading(false);
         }
 
-        fetchUnits();
+        fetchData();
     }, []);
 
     // Loading skeleton
     if (loading) {
         return (
-            <div className="max-w-xl mx-auto px-4 py-8">
-                <div className="animate-pulse space-y-6">
-                    <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-48"></div>
-                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-64"></div>
-                    {[1, 2, 3].map((i) => (
-                        <div key={i} className="space-y-4 pt-6">
-                            <div className="flex gap-3">
-                                <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
-                                <div className="flex-1 space-y-2">
-                                    <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-32"></div>
-                                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-48"></div>
-                                </div>
+            <div className="flex gap-8">
+                <div className="flex-1 max-w-2xl mx-auto px-4 py-8">
+                    <div className="animate-pulse space-y-8">
+                        <div className="h-20 bg-gray-200 dark:bg-gray-700 rounded-2xl"></div>
+                        {[1, 2, 3, 4].map((i) => (
+                            <div key={i} className="flex justify-center">
+                                <div className="w-14 h-14 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
                             </div>
-                            <div className="flex justify-center gap-6 pl-6">
-                                <div className="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
-                                <div className="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
-                                <div className="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
-                            </div>
-                        </div>
-                    ))}
+                        ))}
+                        <div className="h-20 bg-gray-200 dark:bg-gray-700 rounded-2xl"></div>
+                    </div>
                 </div>
             </div>
         );
@@ -101,72 +104,185 @@ export default function LearnPage() {
     }
 
     return (
-        <div className="max-w-xl mx-auto px-4 py-8">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Learning Path</h1>
-            <p className="text-gray-600 dark:text-gray-400 mb-8">Master English step by step</p>
+        <div className="flex gap-6">
+            {/* Main content */}
+            <div className="flex-1 max-w-2xl mx-auto px-4 py-6">
+                {/* Top stats bar */}
+                <div className="flex items-center justify-end gap-5 mb-8">
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-lg">🔥</span>
+                        <span className="font-bold text-gray-700 dark:text-gray-300">12</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-lg">💎</span>
+                        <span className="font-bold text-gray-700 dark:text-gray-300">{userXp}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-lg">❤️</span>
+                        <span className="font-bold text-gray-700 dark:text-gray-300">5</span>
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-sm">
+                        👤
+                    </div>
+                </div>
 
-            {/* Units with Duolingo-style lesson nodes */}
-            <div className="space-y-12">
+                {/* Units */}
                 {units.map((unit, unitIndex) => (
-                    <div key={unit.id} className="relative">
-                        {/* Unit Header */}
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className="w-12 h-12 rounded-xl bg-blue-500 flex items-center justify-center text-white text-xl font-bold shadow-lg">
-                                {unitIndex + 1}
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">{unit.title}</h2>
-                                    <span className="px-2 py-0.5 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full font-medium">
-                                        {unit.cefr_level}
-                                    </span>
+                    <div key={unit.id} className="mb-4">
+                        {/* Unit Banner */}
+                        <div className={`relative bg-gradient-to-r ${unitColors[unitIndex % unitColors.length]} rounded-2xl p-5 pr-6 mb-2 shadow-md`}>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-lg font-bold text-white">
+                                        Unit {unitIndex + 1}: {unit.title}
+                                    </h2>
+                                    <p className="text-white/80 text-sm">{unit.description}</p>
                                 </div>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">{unit.description}</p>
+                                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white">
+                                    {unitIndex === 0 ? "✓" : "📖"}
+                                </div>
                             </div>
                         </div>
 
-                        {/* Lesson Nodes - Duolingo style path */}
-                        <div className="relative ml-6">
-                            {/* Connecting line */}
-                            {unit.lessons.length > 1 && (
-                                <div
-                                    className="absolute left-8 top-8 w-1 bg-gray-200 dark:bg-gray-700 rounded-full"
-                                    style={{ height: `calc(100% - 4rem)` }}
-                                ></div>
-                            )}
+                        {/* Zigzag Lesson Path */}
+                        <div className="py-4">
+                            {unit.lessons.map((lesson, lessonIndex) => {
+                                // Zigzag: alternate left/center/right
+                                const positions = [0, 1, 2, 1]; // center, right, center-right, right pattern
+                                const pos = positions[lessonIndex % 4];
+                                const offsetX = pos === 0 ? 0 : pos === 1 ? -40 : 40;
 
-                            <div className="space-y-6">
-                                {unit.lessons.map((lesson, lessonIndex) => (
-                                    <div key={lesson.id} className="relative flex items-center gap-4">
-                                        {/* Circular lesson button */}
+                                const isCheckpoint = lessonIndex === unit.lessons.length - 1 && unit.lessons.length > 2;
+                                const isCompleted = false; // TODO: track from Supabase
+                                const nodeColor = isCheckpoint
+                                    ? "bg-yellow-400 border-yellow-500 shadow-yellow-400/30"
+                                    : "bg-green-500 border-green-600 shadow-green-500/30";
+
+                                return (
+                                    <div key={lesson.id} className="flex flex-col items-center">
+                                        {/* Connecting line */}
+                                        {lessonIndex > 0 && (
+                                            <div className="w-0.5 h-10 bg-gray-300 dark:bg-gray-600"></div>
+                                        )}
+
+                                        {/* Lesson node */}
                                         <Link
                                             href={`/lesson/${lesson.id}`}
-                                            className="relative z-10 w-16 h-16 rounded-full bg-blue-500 hover:bg-blue-600 text-white font-bold text-xl flex items-center justify-center shadow-lg transition-all hover:scale-110 hover:shadow-xl"
+                                            className="group relative"
+                                            style={{ transform: `translateX(${offsetX}px)` }}
                                         >
-                                            {lessonIndex + 1}
-                                        </Link>
+                                            <div
+                                                className={`w-14 h-14 rounded-full ${nodeColor} border-b-4 flex items-center justify-center shadow-lg transition-all group-hover:scale-110 group-hover:shadow-xl cursor-pointer`}
+                                            >
+                                                {isCheckpoint ? (
+                                                    <span className="text-xl">🏆</span>
+                                                ) : (
+                                                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                                                    </svg>
+                                                )}
+                                            </div>
 
-                                        {/* Lesson info */}
-                                        <div className="flex-1">
-                                            <p className="font-medium text-gray-900 dark:text-white">{lesson.title}</p>
-                                            <p className="text-sm text-gray-500 dark:text-gray-400">+{lesson.xp_reward} XP</p>
-                                        </div>
+                                            {/* Hover tooltip */}
+                                            <div className="absolute left-1/2 -translate-x-1/2 -bottom-8 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                                                <span className="text-xs bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 px-2 py-1 rounded-md shadow">
+                                                    {lesson.title}
+                                                </span>
+                                            </div>
+                                        </Link>
                                     </div>
-                                ))}
-                            </div>
+                                );
+                            })}
                         </div>
                     </div>
                 ))}
             </div>
 
-            {/* Progress indicator at bottom */}
-            <div className="mt-12 p-4 bg-gray-100 dark:bg-gray-800 rounded-xl">
-                <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">Overall Progress</span>
-                    <span className="text-sm text-blue-500">0%</span>
+            {/* Right Sidebar (Desktop only) */}
+            <div className="hidden xl:block w-72 flex-shrink-0 py-6 space-y-4">
+                {/* Daily Quests Card */}
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-bold text-gray-900 dark:text-white">Daily Quests</h3>
+                        <Link href="/dashboard" className="text-xs font-bold text-blue-500 uppercase hover:underline">
+                            View All
+                        </Link>
+                    </div>
+
+                    {/* Quest 1 */}
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-lg">
+                            ⚡
+                        </div>
+                        <div className="flex-1">
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm font-medium text-gray-900 dark:text-white">Earn 50 XP</span>
+                                <span className="text-xs text-gray-500">30/50</span>
+                            </div>
+                            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full mt-1 overflow-hidden">
+                                <div className="h-full bg-orange-500 rounded-full" style={{ width: "60%" }}></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Quest 2 */}
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-lg">
+                            🗣️
+                        </div>
+                        <div className="flex-1">
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm font-medium text-gray-900 dark:text-white">Speak 5 phrases</span>
+                                <span className="text-xs text-gray-500">1/5</span>
+                            </div>
+                            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full mt-1 overflow-hidden">
+                                <div className="h-full bg-blue-500 rounded-full" style={{ width: "20%" }}></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500 rounded-full w-0"></div>
+
+                {/* Leaderboard snippet */}
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5">
+                    <h3 className="font-bold text-gray-900 dark:text-white mb-4">Silver League</h3>
+
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center text-sm">
+                                👤
+                            </div>
+                            <span className="flex-1 text-sm text-gray-700 dark:text-gray-300">David</span>
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">1200 XP</span>
+                        </div>
+                        <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-900/20 -mx-2 px-2 py-1.5 rounded-lg">
+                            <div className="w-8 h-8 rounded-full bg-blue-200 dark:bg-blue-800 flex items-center justify-center text-sm">
+                                👤
+                            </div>
+                            <span className="flex-1 text-sm font-bold text-blue-600 dark:text-blue-400">You</span>
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">{userXp} XP</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center text-sm">
+                                👤
+                            </div>
+                            <span className="flex-1 text-sm text-gray-700 dark:text-gray-300">Sarah</span>
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">850 XP</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Super Lingua Promo */}
+                <div className="bg-gradient-to-br from-purple-500 to-blue-600 rounded-2xl p-5 text-center">
+                    <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3 text-lg">
+                        💎
+                    </div>
+                    <h3 className="font-bold text-white mb-1">Try Super Lingua</h3>
+                    <p className="text-white/80 text-sm mb-4">
+                        No ads, unlimited hearts, and personalized practice.
+                    </p>
+                    <button className="w-full py-2.5 bg-white text-purple-600 font-bold rounded-xl hover:bg-gray-50 transition-colors text-sm">
+                        Start Free Trial
+                    </button>
                 </div>
             </div>
         </div>

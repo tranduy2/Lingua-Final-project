@@ -14,6 +14,7 @@ import {
 import { AnswerDiff } from "@/components/feedback/answer-diff";
 import { GrammarCard } from "@/components/feedback/grammar-card";
 import { logUserWeakness } from "@/lib/api/weakness-tracker";
+import { saveXpToProfile } from "@/lib/api/gamification";
 
 interface LessonInfo {
     id: string;
@@ -130,7 +131,7 @@ export default function LessonPage() {
         }
     }
 
-    function handleNext() {
+    async function handleNext() {
         if (currentIndex < exercises.length - 1) {
             setCurrentIndex(currentIndex + 1);
             setShowResult(false);
@@ -139,6 +140,12 @@ export default function LessonPage() {
             setShowGrammarModal(false);
         } else {
             setLessonComplete(true);
+            // Save XP to Supabase (Phase 8)
+            const supabase = createClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                saveXpToProfile(user.id, score);
+            }
         }
     }
 
