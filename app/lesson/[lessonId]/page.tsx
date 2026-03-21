@@ -12,6 +12,8 @@ import {
     ListeningExercise,
 } from "@/components/exercises/exercise-types";
 import { AnswerDiff } from "@/components/feedback/answer-diff";
+import { GrammarCard } from "@/components/feedback/grammar-card";
+import { logUserWeakness } from "@/lib/api/weakness-tracker";
 
 interface LessonInfo {
     id: string;
@@ -35,6 +37,14 @@ export default function LessonPage() {
     const [lessonComplete, setLessonComplete] = useState(false);
     const [explanation, setExplanation] = useState("");
     const [userAnswer, setUserAnswer] = useState("");
+    const [grammarModal, setGrammarModal] = useState<{
+        title: string;
+        explanation: string;
+        examples: string[];
+        category: string;
+        cefrLevel: string;
+    } | null>(null);
+    const [showGrammarModal, setShowGrammarModal] = useState(false);
 
     useEffect(() => {
         async function fetchData() {
@@ -90,17 +100,33 @@ export default function LessonPage() {
         // Fetch grammar rule explanation if wrong and has a rule
         if (!correct && currentExercise.grammar_rule_id) {
             const supabase = createClient();
+
+            // Fetch full grammar rule for modal
             const { data: rule } = await supabase
                 .from("grammar_rules")
-                .select("explanation")
+                .select("title, explanation, examples, category, cefr_level")
                 .eq("id", currentExercise.grammar_rule_id)
                 .single();
 
             if (rule) {
                 setExplanation(rule.explanation);
+                setGrammarModal({
+                    title: rule.title || "Grammar Rule",
+                    explanation: rule.explanation || "",
+                    examples: rule.examples || [],
+                    category: rule.category || "",
+                    cefrLevel: rule.cefr_level || "",
+                });
+            }
+
+            // Log weakness to user_weaknesses table (7.4)
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                logUserWeakness(user.id, currentExercise.grammar_rule_id, currentExercise.id);
             }
         } else {
             setExplanation("");
+            setGrammarModal(null);
         }
     }
 
@@ -109,6 +135,8 @@ export default function LessonPage() {
             setCurrentIndex(currentIndex + 1);
             setShowResult(false);
             setExplanation("");
+            setGrammarModal(null);
+            setShowGrammarModal(false);
         } else {
             setLessonComplete(true);
         }
@@ -287,11 +315,19 @@ export default function LessonPage() {
                                 </div>
                             )}
 
-                            {/* Grammar rule explanation */}
+                            {/* Grammar rule explanation + modal trigger */}
                             {explanation && (
                                 <div className="mt-3 p-4 bg-card border border-border rounded-lg">
                                     <p className="text-xs font-medium text-primary mb-1">📖 Grammar Tip</p>
-                                    <p className="text-sm text-foreground">{explanation}</p>
+                                    <p className="text-sm text-foreground mb-2">{explanation}</p>
+                                    {grammarModal && (
+                                        <button
+                                            onClick={() => setShowGrammarModal(true)}
+                                            className="text-xs font-medium text-primary hover:underline"
+                                        >
+                                            💡 See full grammar rule →
+                                        </button>
+                                    )}
                                 </div>
                             )}
 
@@ -305,6 +341,19 @@ export default function LessonPage() {
                     )}
                 </div>
             </main>
+
+            {/* Grammar Card Modal (7.3) */}
+            {grammarModal && (
+                <GrammarCard
+                    isOpen={showGrammarModal}
+                    onClose={() => setShowGrammarModal(false)}
+                    title={grammarModal.title}
+                    explanation={grammarModal.explanation}
+                    examples={grammarModal.examples}
+                    category={grammarModal.category}
+                    cefrLevel={grammarModal.cefrLevel}
+                />
+            )}
         </div>
     );
 }
