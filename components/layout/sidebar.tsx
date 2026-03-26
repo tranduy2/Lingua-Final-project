@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -17,6 +18,26 @@ const navItems = [
 export function Sidebar() {
     const pathname = usePathname();
     const router = useRouter();
+    const [isAdmin, setIsAdmin] = useState(false);
+
+    useEffect(() => {
+        async function checkRole() {
+            const supabase = createClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            const { data: profile } = await supabase
+                .from("profiles")
+                .select("role")
+                .eq("id", user.id)
+                .single();
+
+            if (profile?.role === "admin") {
+                setIsAdmin(true);
+            }
+        }
+        checkRole();
+    }, []);
 
     async function handleLogout() {
         const supabase = createClient();
@@ -55,16 +76,18 @@ export function Sidebar() {
                 })}
             </nav>
 
-            {/* Admin Link */}
-            <div className="border-t border-[#D4D6DB] dark:border-[#2E3039] pt-4 mb-4">
-                <Link
-                    href="/admin"
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-[#75777F] hover:bg-[#F0F2F5] dark:hover:bg-[#2A2D35] hover:text-[#1A1C1E] dark:hover:text-white"
-                >
-                    <span className="text-xl">⚙️</span>
-                    <span>Admin</span>
-                </Link>
-            </div>
+            {/* Admin Link — only shown to admin users */}
+            {isAdmin && (
+                <div className="border-t border-[#D4D6DB] dark:border-[#2E3039] pt-4 mb-4">
+                    <Link
+                        href="/admin"
+                        className="flex items-center gap-3 px-4 py-3 rounded-xl text-[#75777F] hover:bg-[#F0F2F5] dark:hover:bg-[#2A2D35] hover:text-[#1A1C1E] dark:hover:text-white"
+                    >
+                        <span className="text-xl">⚙️</span>
+                        <span>Admin</span>
+                    </Link>
+                </div>
+            )}
 
             {/* Theme Toggle & Logout */}
             <div className="space-y-3">
@@ -83,4 +106,3 @@ export function Sidebar() {
         </aside>
     );
 }
-
