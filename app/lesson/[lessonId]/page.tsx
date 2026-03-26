@@ -11,7 +11,6 @@ import {
     WordOrdering,
     ListeningExercise,
 } from "@/components/exercises/exercise-types";
-import { AnswerDiff } from "@/components/feedback/answer-diff";
 import { GrammarCard } from "@/components/feedback/grammar-card";
 import { logUserWeakness } from "@/lib/api/weakness-tracker";
 import { saveXpToProfile } from "@/lib/api/gamification";
@@ -21,6 +20,19 @@ interface LessonInfo {
     title: string;
     xp_reward: number;
 }
+
+interface DiffItem {
+    word: string;
+    status: "correct" | "incorrect" | "missing";
+}
+
+interface AIResult {
+    isCorrect: boolean;
+    feedback: string;
+    diff: DiffItem[];
+}
+
+const TEXT_BASED_TYPES = ["fill_blank", "translation", "listening", "word_order"];
 
 export default function LessonPage() {
     const params = useParams();
@@ -39,6 +51,9 @@ export default function LessonPage() {
     const [lessonComplete, setLessonComplete] = useState(false);
     const [explanation, setExplanation] = useState("");
     const [userAnswer, setUserAnswer] = useState("");
+    const [aiChecking, setAiChecking] = useState(false);
+    const [aiFeedback, setAiFeedback] = useState("");
+    const [aiDiff, setAiDiff] = useState<DiffItem[]>([]);
     const [grammarModal, setGrammarModal] = useState<{
         title: string;
         explanation: string;
@@ -51,13 +66,11 @@ export default function LessonPage() {
     useEffect(() => {
         async function fetchData() {
             const supabase = createClient();
-
             const { data: lessonData } = await supabase
                 .from("lessons")
                 .select("id, title, xp_reward")
                 .eq("id", lessonId)
                 .single();
-
             if (lessonData) setLesson(lessonData);
 
             const { data: exercisesData } = await supabase
@@ -65,11 +78,9 @@ export default function LessonPage() {
                 .select("id, type, question, correct_answer, grammar_rule_id, options")
                 .eq("lesson_id", lessonId)
                 .order("order_index");
-
             if (exercisesData && exercisesData.length > 0) setExercises(exercisesData);
             setLoading(false);
         }
-
         fetchData();
     }, [lessonId]);
 
@@ -91,22 +102,85 @@ export default function LessonPage() {
         if (!currentExercise) return;
 
         const correctAnswer = currentExercise.correct_answer.split("|")[0].trim();
-        const correct = answer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
+        const isTextBased = TEXT_BASED_TYPES.includes(currentExercise.type);
 
-        setIsCorrect(correct);
-        setShowResult(true);
         setUserAnswer(answer);
+        setAiFeedback("");
+        setAiDiff([]);
 
-        if (correct) {
-            setScore(score + 10);
-            setCorrectCount(correctCount + 1);
+        if (isTextBased) {
+            // Use AI for text-based exercises
+            setAiChecking(true);
+
+            let grammarRuleExplanation = "";
+            if (currentExercise.grammar_rule_id) {
+                const supabase = createClient();
+                const { data: rule } = await supabase
+                    .from("grammar_rules")
+                    .select("explanation")
+                    .eq("id", currentExercise.grammar_rule_id)
+                    .single();
+                if (rule) grammarRuleExplanation = rule.explanation;
+            }
+
+            try {
+                const res = await fetch("/api/check-answer", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        question: currentExercise.question,
+                        userAnswer: answer,
+                        correctAnswer,
+                        grammarRuleExplanation: grammarRuleExplanation || undefined,
+                    }),
+                });
+
+                if (!res.ok) throw new Error("API request failed");
+
+                const aiResult: AIResult = await res.json();
+
+                setIsCorrect(aiResult.isCorrect);
+                setAiFeedback(aiResult.feedback);
+                setAiDiff(aiResult.diff || []);
+
+                if (aiResult.isCorrect) {
+                    setScore(score + 10);
+                    setCorrectCount(correctCount + 1);
+                } else {
+                    setHearts(Math.max(0, hearts - 1));
+                }
+            } catch {
+                // Fallback to exact-match
+                const correct = answer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
+                setIsCorrect(correct);
+                setAiFeedback(correct ? "Correct! 🎉" : `The correct answer is "${correctAnswer}".`);
+                if (correct) {
+                    setScore(score + 10);
+                    setCorrectCount(correctCount + 1);
+                } else {
+                    setHearts(Math.max(0, hearts - 1));
+                }
+            }
+
+            setAiChecking(false);
         } else {
-            setHearts(Math.max(0, hearts - 1));
+            // Multiple choice — standard exact-match
+            const correct = answer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
+            setIsCorrect(correct);
+
+            if (correct) {
+                setScore(score + 10);
+                setCorrectCount(correctCount + 1);
+            } else {
+                setHearts(Math.max(0, hearts - 1));
+            }
         }
 
-        if (!correct && currentExercise.grammar_rule_id) {
-            const supabase = createClient();
+        setShowResult(true);
 
+        // Fetch grammar rule for wrong answers
+        if (currentExercise.grammar_rule_id) {
+            const supabase = createClient();
             const { data: rule } = await supabase
                 .from("grammar_rules")
                 .select("title, explanation, examples, category, cefr_level")
@@ -125,7 +199,7 @@ export default function LessonPage() {
             }
 
             const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
+            if (user && !isCorrect) {
                 logUserWeakness(user.id, currentExercise.grammar_rule_id, currentExercise.id);
             }
         } else {
@@ -141,6 +215,8 @@ export default function LessonPage() {
             setExplanation("");
             setGrammarModal(null);
             setShowGrammarModal(false);
+            setAiFeedback("");
+            setAiDiff([]);
         } else {
             setLessonComplete(true);
             const supabase = createClient();
@@ -220,6 +296,8 @@ export default function LessonPage() {
                                 setShowResult(false);
                                 setLessonComplete(false);
                                 setExplanation("");
+                                setAiFeedback("");
+                                setAiDiff([]);
                             }}
                             className="flex-1 py-3.5 border border-[#D4D6DB] dark:border-[#2E3039] rounded-xl font-medium text-[#1A1C1E] dark:text-white hover:bg-[#F0F2F5] dark:hover:bg-[#1B1D24]"
                         >
@@ -237,10 +315,41 @@ export default function LessonPage() {
         );
     }
 
+    // AI Checking state
+    if (aiChecking) {
+        return (
+            <div className="min-h-screen bg-white dark:bg-[#0F1729] flex flex-col">
+                <header className="sticky top-0 bg-white dark:bg-[#0F1729] z-10 px-4 py-3">
+                    <div className="max-w-2xl mx-auto flex items-center gap-4">
+                        <Link href="/learn" className="text-[#75777F]">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </Link>
+                        <div className="flex-1">
+                            <div className="h-3 bg-[#E3E5E8] dark:bg-[#2A2D35] rounded-full overflow-hidden">
+                                <div className="h-full bg-[#3C83F6] rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <span className="text-red-500">❤️</span>
+                            <span className="font-bold text-[#1A1C1E] dark:text-white text-sm">{hearts}</span>
+                        </div>
+                    </div>
+                </header>
+                <div className="flex-1 flex items-center justify-center">
+                    <div className="text-center">
+                        <div className="w-16 h-16 border-4 border-[#3C83F6] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                        <p className="text-lg font-semibold text-[#1A1C1E] dark:text-white mb-1">AI is checking...</p>
+                        <p className="text-sm text-[#75777F]">Analyzing your answer with Gemini AI</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     // Main exercise screen
     return (
         <div className="min-h-screen bg-white dark:bg-[#0F1729] flex flex-col">
-            {/* Top Bar: X + Progress + Hearts */}
+            {/* Top Bar */}
             <header className="sticky top-0 bg-white dark:bg-[#0F1729] z-10 px-4 py-3">
                 <div className="max-w-2xl mx-auto flex items-center gap-4">
                     <Link href="/learn" className="text-[#75777F] hover:text-[#1A1C1E] dark:hover:text-white transition-colors">
@@ -250,10 +359,7 @@ export default function LessonPage() {
                     </Link>
                     <div className="flex-1">
                         <div className="h-3 bg-[#E3E5E8] dark:bg-[#2A2D35] rounded-full overflow-hidden">
-                            <div
-                                className="h-full bg-[#3C83F6] rounded-full transition-all duration-500"
-                                style={{ width: `${progress}%` }}
-                            />
+                            <div className="h-full bg-[#3C83F6] rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
                         </div>
                     </div>
                     <div className="flex items-center gap-1">
@@ -266,7 +372,6 @@ export default function LessonPage() {
             {/* Exercise Content */}
             <main className="flex-1 flex flex-col max-w-2xl mx-auto w-full px-4">
                 <div className="flex-1 py-8">
-                    {/* Exercise Type Heading */}
                     <h1 className="text-2xl md:text-3xl font-bold text-[#1A1C1E] dark:text-white mb-1">
                         {exerciseTypeLabel(currentExercise.type)}
                     </h1>
@@ -274,7 +379,6 @@ export default function LessonPage() {
                         {lesson?.title ? `Lesson: ${lesson.title}` : ""}
                     </p>
 
-                    {/* Exercise component */}
                     {!showResult && (
                         <>
                             {currentExercise.type === "multiple_choice" && (
@@ -294,14 +398,6 @@ export default function LessonPage() {
                             )}
                         </>
                     )}
-
-                    {/* Correct result (stays in main area) */}
-                    {showResult && isCorrect && (
-                        <div className="flex items-center gap-3 mb-6">
-                            <span className="text-3xl">✅</span>
-                            <span className="text-xl font-bold text-green-600 dark:text-green-400">Correct! +10 XP</span>
-                        </div>
-                    )}
                 </div>
 
                 {/* Bottom feedback panel */}
@@ -311,26 +407,61 @@ export default function LessonPage() {
                             ? "bg-green-50 dark:bg-green-900/10 border-t-2 border-green-300 dark:border-green-700"
                             : "bg-red-50 dark:bg-red-900/10 border-t-2 border-red-300 dark:border-red-700"
                     }`}>
-                        {/* Incorrect solution header */}
-                        {!isCorrect && (
-                            <div className="mb-4">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <div className="w-7 h-7 rounded-full bg-red-500 flex items-center justify-center">
-                                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                                        </svg>
-                                    </div>
-                                    <span className="text-lg font-bold text-red-600 dark:text-red-400">Incorrect solution</span>
+                        {/* Header: Correct/Incorrect */}
+                        <div className="flex items-center gap-2 mb-4">
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center ${isCorrect ? "bg-green-500" : "bg-red-500"}`}>
+                                {isCorrect ? (
+                                    <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                                ) : (
+                                    <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                                )}
+                            </div>
+                            <span className={`text-lg font-bold ${isCorrect ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                                {isCorrect ? "Correct! +10 XP" : "Incorrect solution"}
+                            </span>
+                        </div>
+
+                        {/* AI Visual Diff */}
+                        {aiDiff.length > 0 && !isCorrect && (
+                            <div className="bg-white/60 dark:bg-[#1B2840] border border-[#D4D6DB] dark:border-[#2E3039] rounded-xl p-4 mb-4">
+                                <p className="text-xs font-bold text-[#75777F] uppercase tracking-wider mb-3">Word-by-word analysis</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {aiDiff.map((item, i) => (
+                                        <span
+                                            key={i}
+                                            className={`px-2 py-1 rounded-md text-sm font-medium ${
+                                                item.status === "correct"
+                                                    ? "bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400"
+                                                    : item.status === "incorrect"
+                                                    ? "bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 line-through"
+                                                    : "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border border-dashed border-gray-300 dark:border-gray-600"
+                                            }`}
+                                        >
+                                            {item.word}
+                                            {item.status === "missing" && (
+                                                <span className="text-[10px] ml-1 opacity-60">(missing)</span>
+                                            )}
+                                        </span>
+                                    ))}
                                 </div>
-                                <AnswerDiff
-                                    userAnswer={userAnswer}
-                                    correctAnswer={currentExercise.correct_answer.split("|")[0]}
-                                />
                             </div>
                         )}
 
-                        {/* Grammar Rule card */}
-                        {explanation && !isCorrect && (
+                        {/* AI Teacher's Note */}
+                        {aiFeedback && (
+                            <div className="bg-white/60 dark:bg-[#1B2840] border border-[#D4D6DB] dark:border-[#2E3039] rounded-xl p-4 mb-4 flex items-start gap-3">
+                                <div className="w-8 h-8 rounded-full bg-[#3C83F6] flex items-center justify-center flex-shrink-0 mt-0.5">
+                                    <span className="text-sm">💡</span>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-bold text-[#3C83F6] uppercase tracking-wider mb-1">Teacher&apos;s Note</p>
+                                    <p className="text-sm text-[#1A1C1E] dark:text-gray-200 leading-relaxed">{aiFeedback}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Grammar Rule (from DB) */}
+                        {explanation && !isCorrect && !aiFeedback && (
                             <div className="bg-white/60 dark:bg-[#1B2840] border border-[#D4D6DB] dark:border-[#2E3039] rounded-xl p-4 mb-4 flex items-start gap-3">
                                 <div className="w-8 h-8 rounded-full bg-yellow-400 flex items-center justify-center flex-shrink-0 mt-0.5">
                                     <span className="text-sm">💡</span>
@@ -339,26 +470,11 @@ export default function LessonPage() {
                                     <p className="text-xs font-bold text-[#75777F] uppercase tracking-wider mb-1">Grammar Rule</p>
                                     <p className="text-sm text-[#1A1C1E] dark:text-gray-200">{explanation}</p>
                                     {grammarModal && (
-                                        <button
-                                            onClick={() => setShowGrammarModal(true)}
-                                            className="text-xs font-medium text-[#3C83F6] hover:underline mt-2"
-                                        >
+                                        <button onClick={() => setShowGrammarModal(true)} className="text-xs font-medium text-[#3C83F6] hover:underline mt-2">
                                             See full rule →
                                         </button>
                                     )}
                                 </div>
-                            </div>
-                        )}
-
-                        {/* Correct feedback */}
-                        {isCorrect && (
-                            <div className="flex items-center gap-2 mb-4">
-                                <div className="w-7 h-7 rounded-full bg-green-500 flex items-center justify-center">
-                                    <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                    </svg>
-                                </div>
-                                <span className="text-lg font-bold text-green-600 dark:text-green-400">Great job!</span>
                             </div>
                         )}
 
