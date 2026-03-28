@@ -17,7 +17,7 @@ interface Unit {
     id: string;
     title: string;
     description: string;
-    cefr_level: string;
+    cefr_level?: string;
 }
 
 export default function UnitDetailPage() {
@@ -35,7 +35,7 @@ export default function UnitDetailPage() {
             // Fetch unit details
             const { data: unitData } = await supabase
                 .from("units")
-                .select("id, title, description, cefr_level")
+                .select("id, title, description")
                 .eq("id", unitId)
                 .single();
 
@@ -102,7 +102,7 @@ export default function UnitDetailPage() {
                 <div className="flex items-center gap-3 mb-2">
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{unit.title}</h1>
                     <span className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full font-medium">
-                        {unit.cefr_level}
+                        {unit.cefr_level || "N/A"}
                     </span>
                 </div>
                 <p className="text-gray-600 dark:text-gray-400">{unit.description}</p>

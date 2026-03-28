@@ -15,7 +15,7 @@ interface Unit {
     id: string;
     title: string;
     description: string;
-    cefr_level: string;
+    cefr_level?: string;
     order_index: number;
     lessons: Lesson[];
 }
@@ -30,14 +30,25 @@ export default function LearnPage() {
         async function fetchData() {
             const supabase = createClient();
 
-            const { data } = await supabase
+            const { data, error } = await supabase
                 .from("units")
                 .select(`
-                    id, title, description, cefr_level, order_index,
-                    lessons ( id, title, order_index, xp_reward )
+                    id, title, description, order_index,
+                    lessons!lessons_unit_id_fkey ( id, title, order_index, xp_reward )
                 `)
                 .eq("is_published", true)
                 .order("order_index");
+
+            console.log("=== THÁM TỬ BẮT LỖI ===");
+            console.log("1. Link DB web đang dùng:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+            console.log("2. Dữ liệu tải về:", data);
+            console.log("3. Lỗi (nếu có):", error);
+            if (error) {
+                console.log("4. Error code:", error.code);
+                console.log("5. Error message:", error.message);
+                console.log("6. Error details:", error.details);
+                console.log("7. Error hint:", error.hint);
+            }
 
             if (data) {
                 const sorted = data.map((unit) => ({
@@ -49,11 +60,16 @@ export default function LearnPage() {
 
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
-                const { data: profile } = await supabase
+                const { data: profile, error: profileError } = await supabase
                     .from("profiles")
                     .select("total_xp, current_streak")
                     .eq("id", user.id)
                     .single();
+
+                if (profileError) {
+                    console.log("Profiles query failed (schema mismatch?):", profileError);
+                }
+
                 if (profile) {
                     setUserXp(profile.total_xp || 0);
                     setStreak(profile.current_streak || 0);

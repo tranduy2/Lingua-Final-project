@@ -66,19 +66,69 @@ export default function LessonPage() {
     useEffect(() => {
         async function fetchData() {
             const supabase = createClient();
-            const { data: lessonData } = await supabase
+            const { data: lessonData, error: lessonError } = await supabase
                 .from("lessons")
                 .select("id, title, xp_reward")
                 .eq("id", lessonId)
                 .single();
+
+            if (lessonError) {
+                console.log("Lesson query error:", lessonError);
+            }
+
             if (lessonData) setLesson(lessonData);
 
-            const { data: exercisesData } = await supabase
+            const { data: exercisesData, error: exercisesError } = await supabase
                 .from("exercises")
-                .select("id, type, question, correct_answer, grammar_rule_id, options")
+                .select("id, type, question, correct_answer, options")
                 .eq("lesson_id", lessonId)
                 .order("order_index");
-            if (exercisesData && exercisesData.length > 0) setExercises(exercisesData);
+
+            let rows: any[] = exercisesData || [];
+
+            if (exercisesError) {
+                console.log("Exercises query error:", exercisesError);
+                const { data: fallbackData, error: fallbackError } = await supabase
+                    .from("exercises")
+                    .select("*")
+                    .eq("lesson_id", lessonId);
+
+                if (fallbackError) {
+                    console.log("Exercises fallback query error:", fallbackError);
+                } else {
+                    rows = fallbackData || [];
+                }
+            }
+
+            if (rows.length > 0) {
+                const parseOptions = (raw: unknown): string[] | undefined => {
+                    if (Array.isArray(raw)) return raw;
+                    if (typeof raw === "string") {
+                        try {
+                            const parsed = JSON.parse(raw);
+                            return Array.isArray(parsed) ? parsed : undefined;
+                        } catch {
+                            return undefined;
+                        }
+                    }
+                    return undefined;
+                };
+
+                const normalized = rows
+                    .filter((exercise) => exercise?.id && exercise?.type && exercise?.question && exercise?.correct_answer)
+                    .sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
+                    .map((exercise) => ({
+                        id: String(exercise.id),
+                        type: String(exercise.type),
+                        question: String(exercise.question),
+                        correct_answer: String(exercise.correct_answer),
+                        options: parseOptions(exercise.options),
+                        grammar_rule_id: exercise.grammar_rule_id || null,
+                    }));
+
+                setExercises(normalized);
+            }
+
             setLoading(false);
         }
         fetchData();
