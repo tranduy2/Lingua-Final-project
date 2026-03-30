@@ -15,6 +15,19 @@ interface UserStats {
     lastActiveDate: string;
 }
 
+interface ProfileRow {
+    total_xp?: number;
+    current_streak?: number;
+    current_level?: string;
+    level?: string;
+    cefr_level?: string;
+    last_active_date?: string;
+    last_activity_date?: string;
+    updated_at?: string;
+    name?: string;
+    display_name?: string;
+}
+
 export default function DashboardPage() {
     const [stats, setStats] = useState<UserStats>({
         totalXp: 0,
@@ -36,17 +49,24 @@ export default function DashboardPage() {
 
                 const { data: profile } = await supabase
                     .from("profiles")
-                    .select("total_xp, current_streak, current_level, last_active_date")
+                    .select("*")
                     .eq("id", user.id)
                     .single();
 
                 if (profile) {
+                    const row = profile as ProfileRow;
+                    const displayName = row.display_name || row.name;
+
+                    if (displayName) {
+                        setUserName(displayName);
+                    }
+
                     setStats({
-                        totalXp: profile.total_xp || 0,
-                        streak: profile.current_streak || 0,
+                        totalXp: row.total_xp || 0,
+                        streak: row.current_streak || 0,
                         lessonsCompleted: 0,
-                        level: profile.current_level || "A1",
-                        lastActiveDate: profile.last_active_date || "",
+                        level: row.current_level || row.level || row.cefr_level || "A1",
+                        lastActiveDate: row.last_active_date || row.last_activity_date || row.updated_at || "",
                     });
                 }
             }
