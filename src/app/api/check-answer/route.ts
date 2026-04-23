@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
+import { createClient } from "@/lib/server";
 
 interface DiffItem {
     word: string;
@@ -76,10 +77,13 @@ function fallbackCheck(
 export async function POST(request: Request) {
     let userAnswer = "";
     let correctAnswer = "";
+    let remainingHearts = 5;
+    let userId = "";
 
     try {
         const body = await request.json();
         const { question, grammarRuleExplanation } = body;
+        userId = body.userId || "";
         userAnswer = body.userAnswer || "";
         correctAnswer = body.correctAnswer || "";
 
@@ -90,10 +94,47 @@ export async function POST(request: Request) {
             );
         }
 
+        // If user is provided, handle hearts logic
+        if (userId) {
+            const supabase = await createClient();
+            
+            // Get current hearts
+            const { data: userData, error: fetchError } = await supabase
+                .from("users")
+                .select("hearts")
+                .eq("id", userId)
+                .single();
+            
+            if (fetchError) {
+                console.error("Error fetching user hearts:", fetchError);
+            } else if (userData) {
+                remainingHearts = userData.hearts || 5;
+            }
+        }
+
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
             // Fallback to exact-match if no API key
-            return NextResponse.json(fallbackCheck(userAnswer, correctAnswer));
+            const result = fallbackCheck(userAnswer, correctAnswer);
+            
+            // Decrement hearts if wrong and user ID provided
+            if (!result.isCorrect && userId) {
+                const supabase = await createClient();
+                const newHearts = Math.max(0, remainingHearts - 1);
+                
+                const { error: updateError } = await supabase
+                    .from("users")
+                    .update({ hearts: newHearts })
+                    .eq("id", userId);
+                
+                if (updateError) {
+                    console.error("Error updating hearts:", updateError);
+                } else {
+                    remainingHearts = newHearts;
+                }
+            }
+            
+            return NextResponse.json({ ...result, remainingHearts });
         }
 
         const genAI = new GoogleGenerativeAI(apiKey);
@@ -131,13 +172,49 @@ Evaluate the user's answer. Return ONLY the JSON object, nothing else. No markdo
             throw new Error("Invalid response structure");
         }
 
-        return NextResponse.json(parsed);
+        // Decrement hearts if wrong and user ID provided
+        if (!parsed.isCorrect && userId) {
+            const supabase = await createClient();
+            const newHearts = Math.max(0, remainingHearts - 1);
+            
+            const { error: updateError } = await supabase
+                .from("users")
+                .update({ hearts: newHearts })
+                .eq("id", userId);
+            
+            if (updateError) {
+                console.error("Error updating hearts:", updateError);
+            } else {
+                remainingHearts = newHearts;
+            }
+        }
+
+        return NextResponse.json({ ...parsed, remainingHearts });
     } catch (error) {
         console.error("Gemini API error:", error);
 
         // Fallback to exact-match comparison
         if (userAnswer && correctAnswer) {
-            return NextResponse.json(fallbackCheck(userAnswer, correctAnswer));
+            const result = fallbackCheck(userAnswer, correctAnswer);
+            
+            // Decrement hearts if wrong and user ID provided
+            if (!result.isCorrect && userId) {
+                const supabase = await createClient();
+                const newHearts = Math.max(0, remainingHearts - 1);
+                
+                const { error: updateError } = await supabase
+                    .from("users")
+                    .update({ hearts: newHearts })
+                    .eq("id", userId);
+                
+                if (updateError) {
+                    console.error("Error updating hearts:", updateError);
+                } else {
+                    remainingHearts = newHearts;
+                }
+            }
+            
+            return NextResponse.json({ ...result, remainingHearts });
         }
         return NextResponse.json(
             { error: "Failed to process request" },

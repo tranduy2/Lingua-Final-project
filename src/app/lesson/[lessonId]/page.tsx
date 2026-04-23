@@ -30,6 +30,7 @@ interface AIResult {
     isCorrect: boolean;
     feedback: string;
     diff: DiffItem[];
+    remainingHearts?: number;
 }
 
 const TEXT_BASED_TYPES = ["fill_blank", "translation", "listening", "word_order"];
@@ -48,6 +49,8 @@ export default function LessonPage() {
     const [score, setScore] = useState(0);
     const [correctCount, setCorrectCount] = useState(0);
     const [hearts, setHearts] = useState(5);
+    const [userId, setUserId] = useState<string | null>(null);
+    const [showOutOfHeartsModal, setShowOutOfHeartsModal] = useState(false);
     const [lessonComplete, setLessonComplete] = useState(false);
     const [explanation, setExplanation] = useState("");
     const [userAnswer, setUserAnswer] = useState("");
@@ -76,6 +79,23 @@ export default function LessonPage() {
     useEffect(() => {
         async function fetchData() {
             const supabase = createClient();
+            
+            // Fetch user and hearts
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                setUserId(user.id);
+                
+                const { data: userData } = await supabase
+                    .from("users")
+                    .select("hearts")
+                    .eq("id", user.id)
+                    .single();
+                
+                if (userData && userData.hearts !== null) {
+                    setHearts(userData.hearts);
+                }
+            }
+            
             const { data: lessonData, error: lessonError } = await supabase
                 .from("lessons")
                 .select("id, title, xp_reward")
@@ -160,6 +180,12 @@ export default function LessonPage() {
 
     async function handleAnswer(answer: string) {
         if (!currentExercise) return;
+        
+        // Prevent answering if out of hearts
+        if (hearts <= 0) {
+            setShowOutOfHeartsModal(true);
+            return;
+        }
 
         const correctAnswer = currentExercise.correct_answer.split("|")[0].trim();
         const isTextBased = TEXT_BASED_TYPES.includes(currentExercise.type);
@@ -192,6 +218,7 @@ export default function LessonPage() {
                         userAnswer: answer,
                         correctAnswer,
                         grammarRuleExplanation: grammarRuleExplanation || undefined,
+                        userId,
                     }),
                 });
 
@@ -203,11 +230,19 @@ export default function LessonPage() {
                 setAiFeedback(aiResult.feedback);
                 setAiDiff(aiResult.diff || []);
 
+                // Update hearts from API response
+                if (aiResult.remainingHearts !== undefined) {
+                    setHearts(aiResult.remainingHearts);
+                    
+                    // Show "Out of Hearts" modal if hearts reach 0
+                    if (aiResult.remainingHearts === 0) {
+                        setShowOutOfHeartsModal(true);
+                    }
+                }
+
                 if (aiResult.isCorrect) {
                     setScore(score + 10);
                     setCorrectCount(correctCount + 1);
-                } else {
-                    setHearts(Math.max(0, hearts - 1));
                 }
             } catch {
                 // Fallback to exact-match
@@ -218,7 +253,11 @@ export default function LessonPage() {
                     setScore(score + 10);
                     setCorrectCount(correctCount + 1);
                 } else {
-                    setHearts(Math.max(0, hearts - 1));
+                    const newHearts = Math.max(0, hearts - 1);
+                    setHearts(newHearts);
+                    if (newHearts === 0) {
+                        setShowOutOfHeartsModal(true);
+                    }
                 }
             }
 
@@ -232,7 +271,11 @@ export default function LessonPage() {
                 setScore(score + 10);
                 setCorrectCount(correctCount + 1);
             } else {
-                setHearts(Math.max(0, hearts - 1));
+                const newHearts = Math.max(0, hearts - 1);
+                setHearts(newHearts);
+                if (newHearts === 0) {
+                    setShowOutOfHeartsModal(true);
+                }
             }
         }
 
@@ -569,6 +612,25 @@ export default function LessonPage() {
                     category={grammarModal.category}
                     cefrLevel={grammarModal.cefrLevel}
                 />
+            )}
+
+            {/* Out of Hearts Modal */}
+            {showOutOfHeartsModal && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-[#0F1729] rounded-2xl shadow-xl max-w-md w-full p-8 text-center animate-in fade-in zoom-in duration-300">
+                        <div className="text-6xl mb-4">💔</div>
+                        <h2 className="text-3xl font-bold text-[#1A1C1E] dark:text-white mb-2">Out of Hearts!</h2>
+                        <p className="text-[#75777F] text-lg mb-8">
+                            You've made too many mistakes. Take a break or practice to earn more hearts.
+                        </p>
+                        <button
+                            onClick={() => router.push('/learn')}
+                            className="w-full py-3.5 bg-[#3C83F6] text-white font-semibold rounded-xl hover:bg-[#2B6FE0] transition-colors shadow-lg shadow-[#3C83F6]/20"
+                        >
+                            Back to Dashboard
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     );
