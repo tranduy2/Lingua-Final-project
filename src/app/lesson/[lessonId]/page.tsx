@@ -63,6 +63,16 @@ export default function LessonPage() {
     } | null>(null);
     const [showGrammarModal, setShowGrammarModal] = useState(false);
 
+    function speakText(text: string, lang = "en-US") {
+        if (typeof window === "undefined" || !window.speechSynthesis || !text.trim()) return;
+
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = lang;
+        utterance.rate = 0.9;
+        window.speechSynthesis.speak(utterance);
+    }
+
     useEffect(() => {
         async function fetchData() {
             const supabase = createClient();
@@ -422,9 +432,18 @@ export default function LessonPage() {
             {/* Exercise Content */}
             <main className="flex-1 flex flex-col max-w-2xl mx-auto w-full px-4">
                 <div className="flex-1 py-8">
-                    <h1 className="text-2xl md:text-3xl font-bold text-[#1A1C1E] dark:text-white mb-1">
-                        {exerciseTypeLabel(currentExercise.type)}
-                    </h1>
+                    <div className="flex items-center gap-3 mb-1">
+                        <h1 className="text-2xl md:text-3xl font-bold text-[#1A1C1E] dark:text-white">
+                            {exerciseTypeLabel(currentExercise.type)}
+                        </h1>
+                        <button
+                            onClick={() => speakText(currentExercise.question)}
+                            className="px-2.5 py-1.5 rounded-lg border border-[#D4D6DB] dark:border-[#2E3039] text-sm hover:bg-[#F0F2F5] dark:hover:bg-[#1B1D24]"
+                            title="Phat am cau hoi"
+                        >
+                            🔊 Listen
+                        </button>
+                    </div>
                     <p className="text-xs font-bold text-[#3C83F6] uppercase tracking-wider mb-8">
                         {lesson?.title ? `Lesson: ${lesson.title}` : ""}
                     </p>
