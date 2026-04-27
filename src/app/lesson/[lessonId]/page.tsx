@@ -442,7 +442,7 @@ export default function LessonPage() {
                     <div className="text-center">
                         <div className="w-16 h-16 border-4 border-[#3C83F6] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
                         <p className="text-lg font-semibold text-[#1A1C1E] dark:text-white mb-1">AI is checking...</p>
-                        <p className="text-sm text-[#75777F]">Analyzing your answer with Gemini AI</p>
+                        <p className="text-sm text-[#75777F]">Analyzing your answer with LM Studio</p>
                     </div>
                 </div>
             </div>

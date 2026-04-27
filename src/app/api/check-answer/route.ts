@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/server";
 
@@ -7,11 +6,24 @@ interface DiffItem {
     status: "correct" | "incorrect" | "missing";
 }
 
-interface GeminiResponse {
+interface AIResponse {
     isCorrect: boolean;
     feedback: string;
     diff: DiffItem[];
 }
+
+interface LmStudioChatCompletionResponse {
+    choices?: Array<{
+        message?: {
+            content?: string | Array<{ type?: string; text?: string }>;
+        };
+    }>;
+}
+
+const LM_STUDIO_BASE_URL = process.env.LM_STUDIO_BASE_URL || "http://127.0.0.1:1234";
+const LM_STUDIO_MODEL =
+    process.env.LM_STUDIO_MODEL || "qwen2.5-coder-3b-instruct-q4_k_m";
+const LM_STUDIO_API_KEY = process.env.LM_STUDIO_API_KEY || "lm-studio";
 
 const SYSTEM_PROMPT = `You are a friendly, encouraging English teacher evaluating an ESL student's answer.
 
@@ -40,7 +52,7 @@ Build the diff by comparing the user's answer against the correct answer word by
 function fallbackCheck(
     userAnswer: string,
     correctAnswer: string
-): GeminiResponse {
+): AIResponse {
     const correct =
         userAnswer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
 
@@ -72,6 +84,54 @@ function fallbackCheck(
             : `Chưa đúng rồi. Đáp án đúng là "${correctAnswer}".`,
         diff,
     };
+}
+
+function extractAssistantText(payload: LmStudioChatCompletionResponse): string {
+    const content = payload.choices?.[0]?.message?.content;
+
+    if (typeof content === "string") {
+        return content;
+    }
+
+    if (Array.isArray(content)) {
+        return content
+            .map((part) => part?.text || "")
+            .join("")
+            .trim();
+    }
+
+    return "";
+}
+
+async function callLmStudio(messages: Array<{ role: "system" | "user"; content: string }>) {
+    const endpoint = `${LM_STUDIO_BASE_URL.replace(/\/$/, "")}/v1/chat/completions`;
+
+    const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${LM_STUDIO_API_KEY}`,
+        },
+        body: JSON.stringify({
+            model: LM_STUDIO_MODEL,
+            messages,
+            temperature: 0.2,
+        }),
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`LM Studio request failed: [${response.status}] ${errText}`);
+    }
+
+    const payload: LmStudioChatCompletionResponse = await response.json();
+    const text = extractAssistantText(payload);
+
+    if (!text) {
+        throw new Error("LM Studio returned empty completion content");
+    }
+
+    return text;
 }
 
 export async function POST(request: Request) {
@@ -112,36 +172,6 @@ export async function POST(request: Request) {
             }
         }
 
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-            // Fallback to exact-match if no API key
-            const result = fallbackCheck(userAnswer, correctAnswer);
-            
-            // Decrement hearts if wrong and user ID provided
-            if (!result.isCorrect && userId) {
-                const supabase = await createClient();
-                const newHearts = Math.max(0, remainingHearts - 1);
-                
-                const { error: updateError } = await supabase
-                    .from("users")
-                    .update({ hearts: newHearts })
-                    .eq("id", userId);
-                
-                if (updateError) {
-                    console.error("Error updating hearts:", updateError);
-                } else {
-                    remainingHearts = newHearts;
-                }
-            }
-            
-            return NextResponse.json({ ...result, remainingHearts });
-        }
-
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
-        });
-
         const prompt = `${SYSTEM_PROMPT}
 
 Question: "${question || "N/A"}"
@@ -151,8 +181,10 @@ ${grammarRuleExplanation ? `Grammar Rule: "${grammarRuleExplanation}"` : ""}
 
 Evaluate the user's answer. Return ONLY the JSON object, nothing else. No markdown code blocks, no extra text.`;
 
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
+    const text = await callLmStudio([
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: prompt },
+    ]);
 
         // Extract JSON from response (may be wrapped in markdown code blocks)
         let jsonText = text;
@@ -161,7 +193,7 @@ Evaluate the user's answer. Return ONLY the JSON object, nothing else. No markdo
             jsonText = jsonMatch[1];
         }
 
-        const parsed: GeminiResponse = JSON.parse(jsonText);
+        const parsed: AIResponse = JSON.parse(jsonText);
 
         // Validate structure
         if (
@@ -191,7 +223,7 @@ Evaluate the user's answer. Return ONLY the JSON object, nothing else. No markdo
 
         return NextResponse.json({ ...parsed, remainingHearts });
     } catch (error) {
-        console.error("Gemini API error:", error);
+        console.error("LM Studio API error:", error);
 
         // Fallback to exact-match comparison
         if (userAnswer && correctAnswer) {

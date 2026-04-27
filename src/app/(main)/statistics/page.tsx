@@ -67,14 +67,35 @@ export default function StatisticsPage() {
                     createdAt: prof.created_at || "",
                 });
 
-                // Generate simulated weekly XP based on total XP
-                const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-                const total = prof.total_xp || 0;
-                const simulated = days.map((day, i) => ({
-                    day,
-                    xp: Math.max(0, Math.round((total / 7) * (0.5 + Math.random()))),
-                }));
-                setWeeklyXp(simulated);
+                // Get actual weekly XP data for the last 7 days
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+
+                const { data: dailyActivity } = await supabase
+                    .from("user_daily_activity")
+                    .select("activity_date, xp_earned")
+                    .eq("user_id", user.id)
+                    .gte("activity_date", sevenDaysAgo.toISOString().split("T")[0])
+                    .order("activity_date", { ascending: true });
+
+                const daysMap = new Map();
+                for (let i = 6; i >= 0; i--) {
+                    const d = new Date();
+                    d.setDate(d.getDate() - i);
+                    const dateStr = d.toISOString().split("T")[0];
+                    const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
+                    daysMap.set(dateStr, { day: dayName, xp: 0 });
+                }
+
+                if (dailyActivity) {
+                    dailyActivity.forEach((act: any) => {
+                        if (daysMap.has(act.activity_date)) {
+                            daysMap.get(act.activity_date).xp += act.xp_earned || 0;
+                        }
+                    });
+                }
+
+                setWeeklyXp(Array.from(daysMap.values()));
             }
 
             // Fetch user weaknesses with grammar rule names + categories

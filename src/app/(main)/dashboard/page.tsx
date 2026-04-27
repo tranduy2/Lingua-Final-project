@@ -61,10 +61,16 @@ export default function DashboardPage() {
                         setUserName(displayName);
                     }
 
+                    const { count: completedLessonsCount } = await supabase
+                        .from("user_lesson_progress")
+                        .select("*", { count: "exact", head: true })
+                        .eq("user_id", user.id)
+                        .eq("status", "completed");
+
                     setStats({
                         totalXp: row.total_xp || 0,
                         streak: row.current_streak || 0,
-                        lessonsCompleted: 0,
+                        lessonsCompleted: completedLessonsCount || 0,
                         level: row.current_level || row.level || row.cefr_level || "A1",
                         lastActiveDate: row.last_active_date || row.last_activity_date || row.updated_at || "",
                     });

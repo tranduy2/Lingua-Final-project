@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
 interface GeneratedExercise {
@@ -41,6 +40,36 @@ interface GenerateRequest {
     count: number;
 }
 
+interface LmStudioChatCompletionResponse {
+    choices?: Array<{
+        message?: {
+            content?: string | Array<{ type?: string; text?: string }>;
+        };
+    }>;
+}
+
+const LM_STUDIO_BASE_URL = process.env.LM_STUDIO_BASE_URL || "http://127.0.0.1:1234";
+const LM_STUDIO_MODEL =
+    process.env.LM_STUDIO_MODEL || "qwen2.5-coder-3b-instruct-q4_k_m";
+const LM_STUDIO_API_KEY = process.env.LM_STUDIO_API_KEY || "lm-studio";
+
+function extractAssistantText(payload: LmStudioChatCompletionResponse): string {
+    const content = payload.choices?.[0]?.message?.content;
+
+    if (typeof content === "string") {
+        return content;
+    }
+
+    if (Array.isArray(content)) {
+        return content
+            .map((part) => part?.text || "")
+            .join("")
+            .trim();
+    }
+
+    return "";
+}
+
 export async function POST(request: Request) {
     try {
         const body: GenerateRequest = await request.json();
@@ -62,19 +91,6 @@ export async function POST(request: Request) {
         }
 
         const countNum = Math.min(Math.max(parseInt(String(count)) || 5, 1), 10);
-        const apiKey = process.env.GEMINI_API_KEY;
-
-        if (!apiKey) {
-            return NextResponse.json(
-                { error: "GEMINI_API_KEY is not configured" },
-                { status: 500 }
-            );
-        }
-
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
-        });
 
         const prompt = `${SYSTEM_PROMPT}
 
@@ -84,8 +100,34 @@ Number of exercises to generate: ${countNum}
 
 Generate and return ONLY a valid JSON array of ${countNum} exercise objects. No markdown, no extra text. Start with [ and end with ].`;
 
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
+        const endpoint = `${LM_STUDIO_BASE_URL.replace(/\/$/, "")}/v1/chat/completions`;
+        const lmResponse = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${LM_STUDIO_API_KEY}`,
+            },
+            body: JSON.stringify({
+                model: LM_STUDIO_MODEL,
+                messages: [
+                    { role: "system", content: SYSTEM_PROMPT },
+                    { role: "user", content: prompt },
+                ],
+                temperature: 0.3,
+            }),
+        });
+
+        if (!lmResponse.ok) {
+            const errText = await lmResponse.text();
+            throw new Error(`LM Studio request failed: [${lmResponse.status}] ${errText}`);
+        }
+
+        const payload: LmStudioChatCompletionResponse = await lmResponse.json();
+        const text = extractAssistantText(payload);
+
+        if (!text) {
+            throw new Error("LM Studio returned empty completion content");
+        }
 
         // Extract JSON (may be wrapped in markdown code blocks)
         let jsonText = text.trim();
@@ -98,11 +140,11 @@ Generate and return ONLY a valid JSON array of ${countNum} exercise objects. No 
         try {
             exercises = JSON.parse(jsonText);
         } catch (parseError) {
-            console.error("JSON parse error from Gemini:", {
+            console.error("JSON parse error from LM Studio:", {
                 text: jsonText.substring(0, 500),
                 error: parseError instanceof Error ? parseError.message : String(parseError),
             });
-            throw new Error(`Invalid JSON response from Gemini: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+            throw new Error(`Invalid JSON response from LM Studio: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
         }
 
         if (!Array.isArray(exercises)) {

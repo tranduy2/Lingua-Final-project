@@ -138,7 +138,7 @@ export function VocabularyCard({ word, userLevel = "A1" }: VocabularyCardProps) 
             {/* AI badge */}
             <div className="flex items-center gap-1.5 pt-2 border-t border-[#D4D6DB]/50 dark:border-[#2E3039]/50">
                 <span className="text-xs">✨</span>
-                <span className="text-[10px] text-[#75777F]">Powered by Gemini AI · Level {userLevel}</span>
+                <span className="text-[10px] text-[#75777F]">Powered by LM Studio · Level {userLevel}</span>
             </div>
         </div>
     );
