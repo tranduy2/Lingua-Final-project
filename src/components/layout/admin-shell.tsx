@@ -67,6 +67,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                         <span className="text-lg">⚙️</span>
                         <span>Settings</span>
                     </Link>
+                    <Link
+                        href="/learn"
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-[#3C83F6] hover:bg-[#3C83F6]/10 dark:hover:bg-[#1B2840] hover:text-[#1A1C1E] dark:hover:text-white font-medium"
+                    >
+                        <span className="text-lg">📚</span>
+                        <span>Learning Page</span>
+                    </Link>
                     <button
                         onClick={handleLogout}
                         className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 w-full font-medium"
