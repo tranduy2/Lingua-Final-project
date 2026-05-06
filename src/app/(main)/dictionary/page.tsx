@@ -66,7 +66,7 @@ export default function DictionaryPage() {
                                     handleLookup();
                                 }
                             }}
-                            placeholder="Type an English word (e.g. curious)"
+                            placeholder="Type a word in English or Vietnamese (e.g. curious, tò mò)"
                             className="w-full h-12 px-4 rounded-xl border border-[#D4D6DB] dark:border-[#2E3039] bg-white dark:bg-[#0F1729] text-[#1A1C1E] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#3C83F6]"
                         />
                     </div>

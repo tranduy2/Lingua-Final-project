@@ -3,6 +3,10 @@ import { NextResponse } from "next/server";
 const SYSTEM_PROMPT = `You are an expert English teacher helping ESL students learn vocabulary. 
 You explain vocabulary words tailored to the student's CEFR level.
 
+IMPORTANT: The user may input a word in any language (e.g. Vietnamese, Chinese, etc.). 
+If the input word is NOT in English, you MUST first translate it to the most appropriate English equivalent, 
+and then explain that ENGLISH word. The "word" field in your response must ALWAYS be in English.
+
 Level guidelines:
 - A1/A2: Use very simple words, short explanations, and basic example sentences. Keep it beginner-friendly.
 - B1/B2: Provide clear explanations with moderate complexity. Include useful collocations.
@@ -10,13 +14,13 @@ Level guidelines:
 
 You MUST return ONLY a valid JSON object (no markdown, no extra text) with this EXACT structure:
 {
-  "word": "string",
+  "word": "string (MUST be the English word, even if the user typed in another language)",
   "phonetic": "string (IPA format, e.g. /əˈpɒl.ə.dʒaɪz/)",
   "partOfSpeech": "string (e.g. noun, verb, adjective)",
   "definition": "string (Clear explanation in Vietnamese, tailored to the user's CEFR level)",
   "example": "string (An English example sentence suitable for the user's level)",
   "exampleTranslation": "string (Vietnamese translation of the example sentence)",
-  "synonyms": ["string"] // Array of 2-3 synonyms. Empty array if none exist.
+  "synonyms": ["string"] // Array of 2-3 English synonyms. Empty array if none exist.
 }`;
 
 interface DictionaryResponse {
@@ -77,6 +81,7 @@ export async function POST(request: Request) {
 The student's CEFR level is: ${level}
 The word to explain is: "${word}"
 
+If the word above is not in English (e.g. it's Vietnamese or another language), first translate it to the best English equivalent, then explain that English word.
 Return ONLY the JSON object, nothing else. No markdown code blocks, no extra text.`;
 
         const endpoint = `${LM_STUDIO_BASE_URL.replace(/\/$/, "")}/v1/chat/completions`;
