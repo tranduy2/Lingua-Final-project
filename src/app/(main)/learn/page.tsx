@@ -20,6 +20,20 @@ interface Unit {
     lessons: Lesson[];
 }
 
+function getQuestProgressClass(percent: number) {
+    if (percent >= 100) return "w-full";
+    if (percent >= 90) return "w-[90%]";
+    if (percent >= 80) return "w-[80%]";
+    if (percent >= 70) return "w-[70%]";
+    if (percent >= 60) return "w-[60%]";
+    if (percent >= 50) return "w-1/2";
+    if (percent >= 40) return "w-[40%]";
+    if (percent >= 30) return "w-[30%]";
+    if (percent >= 20) return "w-[20%]";
+    if (percent >= 10) return "w-[10%]";
+    return "w-[5%]";
+}
+
 export default function LearnPage() {
     const [units, setUnits] = useState<Unit[]>([]);
     const [loading, setLoading] = useState(true);
@@ -113,12 +127,6 @@ export default function LearnPage() {
         );
     }
 
-    // Zigzag offsets: each lesson node shifts L → center → R → center
-    const getZigzagOffset = (index: number) => {
-        const pattern = [0, -50, 0, 50];
-        return pattern[index % 4];
-    };
-
     return (
         <div className="flex gap-6">
             {/* Main content */}
@@ -170,7 +178,6 @@ export default function LearnPage() {
                         <div className="flex flex-col items-center py-2">
                             {unit.lessons.map((lesson, lessonIndex) => {
                                 const isCheckpoint = lessonIndex === unit.lessons.length - 1 && unit.lessons.length > 2;
-                                const offsetX = getZigzagOffset(lessonIndex);
 
                                 return (
                                     <div key={lesson.id} className="flex flex-col items-center">
@@ -180,11 +187,7 @@ export default function LearnPage() {
                                         )}
 
                                         {/* Node */}
-                                        <Link
-                                            href={`/lesson/${lesson.id}`}
-                                            className="group relative"
-                                            style={{ transform: `translateX(${offsetX}px)` }}
-                                        >
+                                        <Link href={`/lesson/${lesson.id}`} className="group relative">
                                             {isCheckpoint ? (
                                                 /* Trophy checkpoint node */
                                                 <div className="w-16 h-16 rounded-full bg-yellow-400 border-[3px] border-yellow-500 shadow-lg flex items-center justify-center transition-all group-hover:scale-110 group-hover:shadow-xl cursor-pointer">
@@ -236,7 +239,7 @@ export default function LearnPage() {
                                 <span className="text-xs text-[#75777F]">30/50</span>
                             </div>
                             <div className="h-2 bg-gray-200 dark:bg-[#2A2D35] rounded-full mt-1.5 overflow-hidden">
-                                <div className="h-full bg-[#D06A00] rounded-full" style={{ width: "60%" }}></div>
+                                <div className={`h-full bg-[#D06A00] rounded-full ${getQuestProgressClass(60)}`}></div>
                             </div>
                         </div>
                     </div>
@@ -252,7 +255,7 @@ export default function LearnPage() {
                                 <span className="text-xs text-[#75777F]">1/5</span>
                             </div>
                             <div className="h-2 bg-gray-200 dark:bg-[#2A2D35] rounded-full mt-1.5 overflow-hidden">
-                                <div className="h-full bg-[#3C83F6] rounded-full" style={{ width: "20%" }}></div>
+                                <div className={`h-full bg-[#3C83F6] rounded-full ${getQuestProgressClass(20)}`}></div>
                             </div>
                         </div>
                     </div>

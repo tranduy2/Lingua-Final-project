@@ -34,6 +34,34 @@ interface AIResult {
 }
 
 const TEXT_BASED_TYPES = ["fill_blank", "translation", "listening", "word_order"];
+const PROGRESS_WIDTH_CLASSES = [
+    "w-0",
+    "w-[5%]",
+    "w-[10%]",
+    "w-[15%]",
+    "w-[20%]",
+    "w-[25%]",
+    "w-[30%]",
+    "w-[35%]",
+    "w-[40%]",
+    "w-[45%]",
+    "w-1/2",
+    "w-[55%]",
+    "w-[60%]",
+    "w-[65%]",
+    "w-[70%]",
+    "w-[75%]",
+    "w-[80%]",
+    "w-[85%]",
+    "w-[90%]",
+    "w-[95%]",
+    "w-full",
+];
+
+function getProgressWidthClass(progress: number) {
+    const index = Math.min(20, Math.max(0, Math.round(progress / 5)));
+    return PROGRESS_WIDTH_CLASSES[index];
+}
 
 export default function LessonPage() {
     const params = useParams();
@@ -62,7 +90,6 @@ export default function LessonPage() {
         explanation: string;
         examples: string[];
         category: string;
-        cefrLevel: string;
     } | null>(null);
     const [showGrammarModal, setShowGrammarModal] = useState(false);
 
@@ -286,7 +313,7 @@ export default function LessonPage() {
             const supabase = createClient();
             const { data: rule } = await supabase
                 .from("grammar_rules")
-                .select("title, explanation, examples, category, cefr_level")
+                .select("title, explanation, examples, category")
                 .eq("id", currentExercise.grammar_rule_id)
                 .single();
 
@@ -297,7 +324,6 @@ export default function LessonPage() {
                     explanation: rule.explanation || "",
                     examples: rule.examples || [],
                     category: rule.category || "",
-                    cefrLevel: rule.cefr_level || "",
                 });
             }
 
@@ -429,7 +455,7 @@ export default function LessonPage() {
                         </Link>
                         <div className="flex-1">
                             <div className="h-3 bg-[#E3E5E8] dark:bg-[#2A2D35] rounded-full overflow-hidden">
-                                <div className="h-full bg-[#3C83F6] rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+                                <div className={`h-full bg-[#3C83F6] rounded-full transition-all duration-500 ${getProgressWidthClass(progress)}`} />
                             </div>
                         </div>
                         <div className="flex items-center gap-1">
@@ -462,7 +488,7 @@ export default function LessonPage() {
                     </Link>
                     <div className="flex-1">
                         <div className="h-3 bg-[#E3E5E8] dark:bg-[#2A2D35] rounded-full overflow-hidden">
-                            <div className="h-full bg-[#3C83F6] rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+                            <div className={`h-full bg-[#3C83F6] rounded-full transition-all duration-500 ${getProgressWidthClass(progress)}`} />
                         </div>
                     </div>
                     <div className="flex items-center gap-1">
@@ -610,7 +636,6 @@ export default function LessonPage() {
                     explanation={grammarModal.explanation}
                     examples={grammarModal.examples}
                     category={grammarModal.category}
-                    cefrLevel={grammarModal.cefrLevel}
                 />
             )}
 
